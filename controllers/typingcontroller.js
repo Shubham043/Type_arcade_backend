@@ -1,6 +1,7 @@
 import axios from "axios";
 import typingTestSchema from "../models/typingtest.js";
 import mongoose from "mongoose";
+
 import userSchema from "../models/user.js";
 
 // Start test controller
@@ -89,6 +90,7 @@ export const submitTest = async (req, res) => {
 export const leaderBoard = async (req, res) => {
     try {
         // Sort by 'maxspeed' in descending order
+        const cachedleaderboard = await redis.get('leaderboard:global')
         const leaderboard = await userSchema.find().sort({ maxspeed: -1 });
         res.status(200).json(leaderboard);
     } catch (error) {
