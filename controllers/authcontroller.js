@@ -2,6 +2,7 @@ import userSchema from "../models/user.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import redisClient from "../utils/redis.js";
 
 dotenv.config();
 
@@ -19,7 +20,8 @@ export const signUp = async (req, res) => {
     });
 
     await newUser.save();
-
+     console.log(newUser);
+     
     res.status(201).json({
       message: "Sign Up Successful",
       user: newUser,
@@ -61,3 +63,46 @@ export  const signIn = async (req, res) => {
     res.status(500).send("Server error");
   }
 };
+
+export const getUserProfile = async (req, res) => {
+  try {
+    const userId = req.body.user?.userId;
+    if (!userId) {
+      return res.status(403).send("Authentication failed");
+    }
+    const cachedProfileStatic = await  redisClient.get(`userProfileStatic:${userId}`);
+    let userStatic;
+    if(cachedProfileStatic){
+      console.log("fetching data from redis ...")
+      userStatic = JSON.parse(cachedProfileStatic);
+    }
+    else{
+      console.log("fetching static data from database ...");
+      const user = await userSchema.findById(userId);
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+      userStatic = {username : user.username,email : user.email};
+      await redisClient.set(`userProfileStatic:${userId}`,JSON.stringify(userStatic),'EX',3600);
+      
+    }
+    
+    const user = await userSchema.findById(userId);
+    if (!user) {
+      return res.status(404).send("User not found");
+    }
+     const userProfile = {
+      ...userStatic,
+      maxspeed : user.maxspeed,
+      avg_speed : user.avg_speed,
+      typinghistory : user.typinghistory
+     }
+
+    res.status(200).send(userProfile);
+    // console.log(user); 
+  } catch (error) {
+    res.status(500).send("An error occurred while fetching the user profile");
+    // console.log(error);
+  }
+};
+ 

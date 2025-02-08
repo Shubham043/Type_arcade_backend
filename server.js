@@ -2,37 +2,57 @@ import express from "express";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authroutes.js";
 import typingTestRoutes from "./routes/typingroutes.js";
-import redisClient from "./utils/redis.js"; // Import Redis client
+import redisClient from "./utils/redis.js"; 
+import { createServer } from "http";
+import cors from "cors";
+import { Server } from "socket.io"; 
 
 const app = express();
 const port = 8000;
+const server = createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "http://localhost:4000",
+        methods: ["GET", "POST"],
+    },
+});
 
-// Middleware to parse JSON requests
+// Middleware
+app.use(cors());
 app.use(express.json());
 
-// User routes
-app.use('/auth', authRoutes);
-app.use('/test', typingTestRoutes);
+io.on("connection", (socket) => {
+    console.log("A user connected:", socket.id);
 
-// Default route
+    socket.on("message", (data) => {
+        console.log("Received:", data);
+        io.emit("message", data); // Broadcast
+    });
+
+    socket.on("disconnect", () => {
+        console.log("User disconnected:", socket.id);
+    });
+});
+
+// Routes
+app.use("/auth", authRoutes);
+app.use("/test", typingTestRoutes);
 app.get("/", (req, res) => {
     res.send("Welcome to TypeArcade!");
 });
 
-// Redis connection log
+// Redis connection
 redisClient.connect()
-    .then(() => {
-        console.log("Connected to Redis successfully!");
-    })
+    .then(() => console.log("Connected to Redis successfully!"))
     .catch((err) => {
         console.error("Redis connection failed:", err.message);
-        process.exit(1); // Exit if Redis is critical to the app
+        process.exit(1);
     });
 
-// MongoDB connection and server startup
+// MongoDB connection and start server
 connectDB()
     .then(() => {
-        app.listen(port, () => {
+        server.listen(port, () => { 
             console.log(`Server is running on port: ${port}`);
         });
     })

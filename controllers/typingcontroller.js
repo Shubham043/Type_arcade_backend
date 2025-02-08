@@ -1,8 +1,8 @@
 import axios from "axios";
 import typingTestSchema from "../models/typingtest.js";
 import mongoose from "mongoose";
-
-import userSchema from "../models/user.js";
+import redisClient from "../utils/redis.js";
+import User from "../models/user.js";
 
 // Start test controller
 export const startTest = async (req, res) => {
@@ -33,15 +33,13 @@ export const startTest = async (req, res) => {
     }
 };
 
-// Submit test controller
-import User from "../models/user.js"; // Make sure User is correctly imported
 
 export const submitTest = async (req, res) => {
     try {
         const { wpm, accuracy, duration } = req.body;
         const userId = req.body.user?.userId;  // Access userId from req.body.user
 
-        console.log(userId);  // Debugging to see if the userId is correctly extracted
+        // console.log(userId);  // Debugging to see if the userId is correctly extracted
 
         if (!userId) {
             return res.status(403).json({ error: "Authentication failed" });
@@ -66,7 +64,12 @@ export const submitTest = async (req, res) => {
         if (curr_maxspeed < wpm) {
             userObj.maxspeed = wpm;
         }
+        const last_Avg_speed = userObj.avg_speed || 0;
+        const historyLength = userObj.typinghistory.length;
+        const totalSpeed = last_Avg_speed * historyLength + wpm;
+        const new_Avg_speed = totalSpeed / (historyLength + 1);
 
+        userObj.avg_speed = Math.floor(new_Avg_speed);
         userObj.typinghistory.push(newTypingHistory);
 
         // Save the updated user object
@@ -89,11 +92,29 @@ export const submitTest = async (req, res) => {
 
 export const leaderBoard = async (req, res) => {
     try {
-        // Sort by 'maxspeed' in descending order
-        const cachedleaderboard = await redis.get('leaderboard:global')
-        const leaderboard = await userSchema.find().sort({ maxspeed: -1 });
+        // Check if leaderboard data exists in Redis
+        let cachedLeaderboard = await redisClient.get("leaderboard:global");
+
+        if (cachedLeaderboard) {
+            console.log("Serving leaderboard from cache...");
+            return res.status(200).json(JSON.parse(cachedLeaderboard));
+        }
+
+        // If no cached data, fetch from the database
+        console.log("Fetching leaderboard from database...");
+        const leaderboard = await User.find().sort({ maxspeed: -1 });
+
+        // Cache the leaderboard data in Redis for future requests
+        await redisClient.set(
+            "leaderboard:global",
+            JSON.stringify(leaderboard),
+            "EX",
+            3600 // Expiration time (1 hour) in seconds
+        );
+
         res.status(200).json(leaderboard);
     } catch (error) {
+        console.error("Error fetching leaderboard:", error);
         res.status(500).send("Can't access the leaderboard");
     }
 };
