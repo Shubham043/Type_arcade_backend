@@ -1,4 +1,3 @@
-
 import express from "express";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authroutes.js";
@@ -64,62 +63,99 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("player_ready", () => {
-    userReadyStatus[socket.id] = true;
+    socket.on("player_ready", () => {
+        userReadyStatus[socket.id] = true;
 
-    const roomName = Array.from(socket.rooms).find((r) => r.startsWith("room-"));
-    if (!roomName) return;
+        const roomName = Array.from(socket.rooms).find((r) =>
+            r.startsWith("room-")
+        );
+        if (!roomName) return;
 
-    const clients = Array.from(io.sockets.adapter.rooms.get(roomName) || []);
-    const bothReady = clients.every((id) => userReadyStatus[id]);
+        const clients = Array.from(
+            io.sockets.adapter.rooms.get(roomName) || []
+        );
+        const bothReady = clients.every((id) => userReadyStatus[id]);
 
-    socket.to(roomName).emit("update_ready_status", true);
+        socket.to(roomName).emit("update_ready_status", true);
 
-    if (clients.length === 2 && bothReady) {
-      io.to(roomName).emit("start_countdown");
-    }
+        if (clients.length === 2 && bothReady) {
+            io.to(roomName).emit("start_countdown");
+        }
+    });
+
+    socket.on("player_score", ({ score }) => {
+        playerScores[socket.id] = score;
+
+        const roomName = Array.from(socket.rooms).find((r) =>
+            r.startsWith("room-")
+        );
+        if (!roomName) return;
+
+        const clients = Array.from(
+            io.sockets.adapter.rooms.get(roomName) || []
+        );
+        if (
+            clients.length === 2 &&
+            clients.every((id) => playerScores[id] !== undefined)
+        ) {
+            const [id1, id2] = clients;
+            const score1 = playerScores[id1];
+            const score2 = playerScores[id2];
+
+            const user1 = userSocketMap[id1];
+            const user2 = userSocketMap[id2];
+
+            console.log(`Scores - ${user1}: ${score1}, ${user2}: ${score2}`);
+
+            io.to(id1).emit("opponent_score", { score: score2 });
+            io.to(id2).emit("opponent_score", { score: score1 });
+
+            delete playerScores[id1];
+            delete playerScores[id2];
+        }
+    });
+    
+   socket.on("reset-game", () => {
+  userReadyStatus[socket.id] = false;
+  delete playerScores[socket.id]; 
+
+  const roomName = Array.from(socket.rooms).find((r) => r.startsWith("room-"));
+  if (!roomName) return;
+
+  // Reset all players in the room
+  const clients = Array.from(io.sockets.adapter.rooms.get(roomName) || []);
+  clients.forEach(id => {
+    userReadyStatus[id] = false;
+    delete playerScores[id];
   });
 
-  socket.on("player_score", ({ score }) => {
-    playerScores[socket.id] = score;
+  // Notify all players in room
+  io.to(roomName).emit("game-reset");
+});
 
-    const roomName = Array.from(socket.rooms).find((r) => r.startsWith("room-"));
-    if (!roomName) return;
+    socket.on("disconnect", () => {
+        console.log(
+            `User disconnected: ${socket.id} (${
+                userSocketMap[socket.id] || "unknown"
+            })`
+        );
 
-    const clients = Array.from(io.sockets.adapter.rooms.get(roomName) || []);
-    if (clients.length === 2 && clients.every((id) => playerScores[id] !== undefined)) {
-      const [id1, id2] = clients;
-      const score1 = playerScores[id1];
-      const score2 = playerScores[id2];
+        const index = waitingUsers.findIndex(
+            (user) => user.socket.id === socket.id
+        );
+        if (index !== -1) waitingUsers.splice(index, 1);
 
-      const user1 = userSocketMap[id1];
-      const user2 = userSocketMap[id2];
+        const roomName = Array.from(socket.rooms).find((r) =>
+            r.startsWith("room-")
+        );
+        if (roomName) {
+            socket.to(roomName).emit("player_disconnected");
+        }
 
-      console.log(`Scores - ${user1}: ${score1}, ${user2}: ${score2}`);
-
-      io.to(id1).emit("opponent_score", { score: score2 });
-      io.to(id2).emit("opponent_score", { score: score1 });
-
-      delete playerScores[id1];
-      delete playerScores[id2];
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`User disconnected: ${socket.id} (${userSocketMap[socket.id] || "unknown"})`);
-
-    const index = waitingUsers.findIndex((user) => user.socket.id === socket.id);
-    if (index !== -1) waitingUsers.splice(index, 1);
-
-    const roomName = Array.from(socket.rooms).find((r) => r.startsWith("room-"));
-    if (roomName) {
-      socket.to(roomName).emit("player_disconnected");
-    }
-
-    delete userReadyStatus[socket.id];
-    delete playerScores[socket.id];
-    delete userSocketMap[socket.id];
-  });
+        delete userReadyStatus[socket.id];
+        delete playerScores[socket.id];
+        delete userSocketMap[socket.id];
+    });
 });
 
 // Routes
@@ -127,7 +163,7 @@ app.use("/auth", authRoutes);
 app.use("/test", typingTestRoutes);
 
 app.get("/", (req, res) => {
-  res.send("Welcome to TypeArcade!");
+    res.send("Welcome to TypeArcade!");
 });
 
 // Redis connection (optional)
