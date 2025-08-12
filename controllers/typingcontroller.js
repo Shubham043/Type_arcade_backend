@@ -19,7 +19,7 @@ export const startTest = async (req, res) => {
         try {
             const response = await axios.get("https://zenquotes.io/api/random");
 
-            mainText = response.data[0].q + response.data[1].q; 
+            mainText = response.data[0].q; 
             console.log(mainText);
             // Extract the quote
         } catch (apiError) {
