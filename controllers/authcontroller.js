@@ -69,7 +69,7 @@ export const signUp = async (req, res) => {
 
         await newUser.save();
         console.log(newUser);
-        const verificationLink = `${url}/auth/verify/${token}`;
+        const verificationLink = `https://typearcade-backend.onrender.com/auth/verify/${token}`;
         await sendEmail(
             email,
             "Verify your TypeArcade account 🎯",
