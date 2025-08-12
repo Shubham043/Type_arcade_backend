@@ -23,6 +23,13 @@ const userSchema = new Schema({
         type: Number, 
         default: 0 
     },
+    verified:{
+     type:Boolean,
+     default : false
+    },
+    verificationToken:{
+        type:String
+    },
     typinghistory: [{
         wpm: Number,
         accuracy: Number,
@@ -35,5 +42,6 @@ const userSchema = new Schema({
 });
 
 // Compile and export the model
+userSchema.index({ maxSpeed: -1 }, { name: "leaderboard_speed_desc" });
 const User = mongoose.model("User", userSchema);
 export default User;

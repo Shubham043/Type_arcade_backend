@@ -7,6 +7,6 @@ const router = express.Router();
 // Typing test routes
 router.get('/starttest',authmiddleware, startTest);  
 router.post('/submittest',authmiddleware, submitTest);  
-router.get('/leaderboard',authmiddleware, leaderBoard)
+router.get('/leaderBoard',leaderBoard)
 
 export default router;

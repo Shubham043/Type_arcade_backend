@@ -15,11 +15,11 @@ export const startTest = async (req, res) => {
         }
 
         // Fetch mainText from an API
-        let mainText = "All I dream of is your eyes, all I long for is your touch."; // Default text
+        let mainText = "All I dream of is your eyes, all I long for is your touch.";
         try {
             const response = await axios.get("https://zenquotes.io/api/random");
 
-            mainText = response.data[0].q; 
+            mainText = response.data[0].q + response.data[1].q; 
             console.log(mainText);
             // Extract the quote
         } catch (apiError) {
@@ -37,9 +37,8 @@ export const startTest = async (req, res) => {
 export const submitTest = async (req, res) => {
     try {
         const { wpm, accuracy, duration } = req.body;
-        const userId = req.body.user?.userId;  // Access userId from req.body.user
+        const userId = req.body.user?.userId; 
 
-        // console.log(userId);  // Debugging to see if the userId is correctly extracted
 
         if (!userId) {
             return res.status(403).json({ error: "Authentication failed" });
@@ -48,7 +47,6 @@ export const submitTest = async (req, res) => {
         const date = new Date();
         const newTypingHistory = { wpm, accuracy, duration, date };
 
-        // Fetch the user from the database using the userId
         const userObj = await User.findById(userId); 
 
         if (!userObj) {
@@ -92,27 +90,31 @@ export const submitTest = async (req, res) => {
 
 export const leaderBoard = async (req, res) => {
     try {
-        // Check if leaderboard data exists in Redis
-        let cachedLeaderboard = await redisClient.get("leaderboard:global");
-
-        if (cachedLeaderboard) {
-            console.log("Serving leaderboard from cache...");
-            return res.status(200).json(JSON.parse(cachedLeaderboard));
-        }
-
-        // If no cached data, fetch from the database
+         const limit = parseInt(req.query.limit) || 10;
+        const page = parseInt(req.query.page) || 1;
+        const skip = (page - 1) * limit;
         console.log("Fetching leaderboard from database...");
-        const leaderboard = await User.find().sort({ maxspeed: -1 });
-
-        // Cache the leaderboard data in Redis for future requests
-        await redisClient.set(
-            "leaderboard:global",
-            JSON.stringify(leaderboard),
-            "EX",
-            3600 // Expiration time (1 hour) in seconds
-        );
-
-        res.status(200).json(leaderboard);
+        const leaderboard = await User.find()
+        .select('username avatar maxspeed -_id')
+        .sort({ maxspeed: -1 })
+        .skip(skip)
+        .limit(limit);
+         if (!leaderboard.length) {
+            return res.status(200).json({
+                success: true,
+                data: [],
+                message: "No users found on the leaderboard",
+            });
+        }
+         res.status(200).json({
+            success: true,
+            data: leaderboard,
+            pagination: {
+                currentPage: page,
+                itemsPerPage: limit,
+                nextPage: leaderboard.length === limit ? page + 1 : null,
+            },
+        });
     } catch (error) {
         console.error("Error fetching leaderboard:", error);
         res.status(500).send("Can't access the leaderboard");
